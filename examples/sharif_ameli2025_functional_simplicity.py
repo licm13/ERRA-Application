@@ -1,23 +1,17 @@
 """Synthetic ERRA study mirroring Sharif & Ameli (2025).
 
 通过合成的湿润/干燥状态转移模型复刻 Sharif 和 Ameli（2025）的暴雨径流分析，突显
-“功能简洁性”概念。脚本包含详细中英文注释并输出带中文字体的图件。
+"功能简洁性"概念。脚本包含详细中英文注释并输出带中文字体的图件。
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-PYTHON_DIR = REPO_ROOT / "code" / "python"
-if str(PYTHON_DIR) not in sys.path:
-    sys.path.insert(0, str(PYTHON_DIR))
-
-from erra import erra, plot_erra_results  # noqa: E402
+from erra import erra, plot_erra_results
 
 
 def generate_state_series(n: int, seed: int = 7) -> np.ndarray:

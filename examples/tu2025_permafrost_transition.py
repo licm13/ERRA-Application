@@ -5,19 +5,13 @@
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-PYTHON_DIR = REPO_ROOT / "code" / "python"
-if str(PYTHON_DIR) not in sys.path:
-    sys.path.insert(0, str(PYTHON_DIR))
-
-from erra import erra, plot_erra_results  # noqa: E402
+from erra import erra, plot_erra_results
 
 
 def create_climate_series(n: int = 600, seed: int = 314) -> Tuple[pd.DataFrame, pd.Series]:
