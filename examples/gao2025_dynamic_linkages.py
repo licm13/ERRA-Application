@@ -5,7 +5,6 @@
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Tuple
 
@@ -15,12 +14,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Import ERRA utilities / 导入 ERRA 工具
 # ---------------------------------------------------------------------------
-REPO_ROOT = Path(__file__).resolve().parents[1]
-PYTHON_DIR = REPO_ROOT / "code" / "python"
-if str(PYTHON_DIR) not in sys.path:
-    sys.path.insert(0, str(PYTHON_DIR))
-
-from erra import erra, plot_erra_results  # noqa: E402  # pylint: disable=wrong-import-position
+from erra import erra, plot_erra_results
 
 
 def create_precipitation_series(n: int, seed: int = 42) -> Tuple[pd.DataFrame, pd.Series]:

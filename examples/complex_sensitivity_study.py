@@ -5,19 +5,13 @@
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-PYTHON_DIR = REPO_ROOT / "code" / "python"
-if str(PYTHON_DIR) not in sys.path:
-    sys.path.insert(0, str(PYTHON_DIR))
-
-from erra import erra, plot_erra_results  # noqa: E402
+from erra import erra, plot_erra_results
 
 
 def build_multiscale_forcings(n: int = 720, seed: int = 2025) -> Tuple[pd.DataFrame, pd.Series]:
