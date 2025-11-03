@@ -98,16 +98,16 @@ ERRA 估计**径流响应分布（RRDs）**——描述流域如何随时间将�
 
 ### Install from source / 从源码安装
 
-```bash
+```powershell
 # Clone the repository / 克隆仓库
 git clone https://github.com/licm13/ERRA.git
 cd ERRA
 
 # Install in editable mode / 以可编辑模式安装
-pip install -e .
+python -m pip install -U pip; pip install -e .
 
 # Or install with development dependencies / 或安装开发依赖
-pip install -e ".[dev]"
+python -m pip install -U pip; pip install -e .[dev]
 ```
 
 ### Dependencies / 依赖
@@ -160,15 +160,15 @@ plot_erra_results(
 
 ### Running Examples / 运行示例
 
-```bash
+```powershell
 # Run the master demonstration (showcases all features)
 # 运行大师级演示（展示所有功能）
-python examples/master_demonstration.py
+python examples\master_demonstration.py
 
 # Run specific examples
 # 运行特定示例
-python examples/gao2025_dynamic_linkages.py
-python examples/sharif_ameli2025_functional_simplicity.py
+python examples\gao2025_dynamic_linkages.py
+python examples\sharif_ameli2025_functional_simplicity.py
 ```
 
 ---
@@ -483,3 +483,153 @@ This Python implementation builds upon the original R code by **James Kirchner**
 ---
 
 **Happy analyzing! / 祝分析愉快！** 🌊📊
+
+---
+
+## Examples and Demos / 示例与演示
+
+- Advanced examples live in `examples/` and import the installed package `erra`.
+    进阶示例位于 `examples/`，通过已安装的 `erra` 包运行。
+
+- Quick demos live in `code/python-version-example/` and ship with a local `erra.py` for
+    self-contained runs. Prefer the package under `src/erra` for development work.
+    快速演示位于 `code/python-version-example/`，包含本地 `erra.py` 便于即开即用；开发时更推荐使用 `src/erra` 包。
+
+Data location / 数据路径：
+
+- Default demo data are under `reference_materials/R_implementation/demonstration-scripts/Source data/`.
+    默认演示数据位于 `reference_materials/R_implementation/demonstration-scripts/Source data/`。
+- You can override via environment variable `ERRA_DATA_DIR`.
+    可通过环境变量 `ERRA_DATA_DIR` 自定义数据目录。
+
+PowerShell example / PowerShell 示例：
+
+```powershell
+$env:ERRA_DATA_DIR = "${PWD}\reference_materials\R_implementation\demonstration-scripts\Source data"
+python code\python-version-example\example.py
+```
+
+---
+
+## Plotting Guide / 绘图指南
+
+This package provides comprehensive plots via `plot_erra_results()`.
+本包通过 `plot_erra_results()` 提供完整绘图功能。
+
+Generated plots / 生成的图片：
+
+1. RRD with error bars (`*_rrd_with_errors.png`)  带误差棒的 RRD 图
+2. Fitted vs observed (`*_fitted_vs_observed.png`)  拟合对比图（含 R² 与 1:1 线）
+3. Residuals analysis (`*_residuals_analysis.png`)  残差分析（时间序列、直方图、Q-Q、残差vs拟合）
+4. Broken-stick (`*_broken_stick.png`)  折线（断棍）表示（当 `nk>0`）
+
+Basic usage / 基本用法：
+
+```python
+from erra import erra, plot_erra_results
+import pandas as pd
+from pathlib import Path
+
+result = erra(p=df[["p"]], q=df["q"], m=48)
+script_name = Path(__file__).stem
+figures_dir = Path(__file__).resolve().parent / "figures"
+
+plot_erra_results(
+        result=result,
+        observed_q=df["q"],
+        output_dir=figures_dir,
+        filename_prefix=script_name,
+        save_plots=True,
+        show_plots=False,
+        use_chinese=True,   # True: bilingual / False: English only
+)
+```
+
+Notes / 注意：
+
+- Figures are saved at 300 DPI; the `figures` folder is created automatically.
+    图片默认 300 DPI；`figures` 目录自动创建。
+- If Chinese fonts are missing, set `use_chinese=False` to avoid glyph warnings.
+    系统缺少中文字体时，建议设置 `use_chinese=False` 以避免字体告警。
+
+---
+
+## Theory Assets / 理论资源
+
+Key theory PDFs and the original R implementation are included under `reference_materials/`.
+理论文档与原始 R 实现收录在 `reference_materials/` 目录。
+
+```text
+reference_materials/
+├── theory_pdfs/                      # Intro and core theory PDFs / 理论与方法综述
+├── papers/                           # Application papers / 应用论文
+└── R_implementation/
+        ├── erra_scripts_v1.06/           # Original R scripts / 原始 R 脚本
+        └── demonstration-scripts/
+                └── Source data/              # MOPEX 等演示数据
+```
+
+For a quick Python demo, see `code/python-version-example/`.
+快速 Python 演示请参见 `code/python-version-example/`。
+
+---
+
+## Scripts overview / 脚本总览
+
+Where to find and what each script does — with concise bilingual notes.
+脚本位置与作用概览——附简要中英文说明。
+
+- code/examples/master_demonstration.py
+    - EN: Master demo covering all advanced features: multiple drivers, nonlinear (xknots), non-stationary splitting, broken-stick (nk), robust IRLS; synthetic data; saves figures under the same folder.
+    - 中文：大师级综合演示，涵盖多驱动、非线性（xknots）、非平稳分割、断棍（nk）、鲁棒IRLS；使用合成数据；图片保存在同级目录。
+
+- code/examples/gao2025_dynamic_linkages.py
+    - EN: Reproduces Gao (2025)-style dynamic linkages among convective, stratiform, recharge proxy; uses weights; typical m≈45; outputs `gao2025_dynamic_*` figures.
+    - 中文：复刻 Gao（2025）风格的对流/层状/补给三类驱动及其动态联系；包含观测权重；m≈45；输出 `gao2025_dynamic_*` 图件。
+
+- code/examples/sharif_ameli2025_functional_simplicity.py
+    - EN: Demonstrates “functional simplicity” with a wet/dry Markov chain driving forcings; dt=0.5 (12-hour steps); shows contrasting fast/slow responses.
+    - 中文：通过干/湿两态马尔可夫链驱动示例，展示“功能简洁性”；dt=0.5（12小时步长）；体现快/慢响应差异。
+
+- code/examples/tu2025_permafrost_transition.py
+    - EN: Permafrost transition demo with mid-series kernel change (degrading sensitivity); illustrates non-stationarity in time.
+    - 中文：多年冻土过渡示例，中途切换冲激响应核（敏感度下降）；体现时间上的非平稳性。
+
+- code/examples/complex_sensitivity_study.py
+    - EN: Stress-test comparing weak vs strong regularization (nu) and different fq; returns result variants and saves comparative plots.
+    - 中文：综合压力测试，对比弱/强正则与不同 fq；返回多组结果并保存对比图。
+
+- code/examples/example.py
+    - EN: Minimal linear analysis using MOPEX SacoR dataset; bilingual plots; auto-resolves data folder or honors `ERRA_DATA_DIR`.
+    - 中文：最小线性示例（MOPEX SacoR 数据）；中英文图；自动定位数据目录或使用 `ERRA_DATA_DIR`。
+
+- code/examples/example_en.py
+    - EN: Same as above with English-only plots; useful when Chinese fonts are unavailable.
+    - 中文：纯英文版，系统无中文字体时更稳妥。
+
+- code/python-version-example/erra.py
+    - EN: Self-contained demo implementation for quick runs in the `code/python-version-example/` folder. Its `ERRAResult` differs from `src/erra/erra_core.ERRAResult`, so linters may warn; prefer `src/erra` for development.
+    - 中文：`code/python-version-example/` 目录的自包含演示实现；其 `ERRAResult` 与包内类型不同，静态检查可能提示；开发时优先使用 `src/erra`。
+
+- Package modules / 包内模块
+    - `src/erra/erra_core.py`: EN: Algorithmic core with linear/nonlinear/splitting/robust/nk; returns `ERRAResult`. 中文：算法核心，包含线性/非线性/分割/鲁棒/nk；返回 `ERRAResult`。
+    - `src/erra/utils.py`: EN: Plotting utilities (`plot_erra_results`): RRD+errors, fitted vs observed, residuals, broken-stick. 中文：绘图工具。
+    - `src/erra/nonlin.py`: EN: Nonlinear helpers (x′ transform, NRF construction and labels). 中文：非线性辅助（x′ 变换、NRF 组装与标签）。
+    - `src/erra/splitting.py`: EN: Covariate-based splitting utilities and validators. 中文：按协变量分割工具与校验。
+
+Run tips / 运行提示：
+
+- Use installed package for scripts in `code/examples/`:
+    使用已安装包运行 `code/examples/`：
+
+    ```powershell
+    python -m pip install -U pip; pip install -e .
+    python code\examples\master_demonstration.py
+    ```
+
+- Ensure data path is available (for MOPEX demos):
+    确保演示数据路径可用：
+
+    ```powershell
+    $env:ERRA_DATA_DIR = "${PWD}\reference_materials\R_implementation\demonstration-scripts\Source data"
+    ```
