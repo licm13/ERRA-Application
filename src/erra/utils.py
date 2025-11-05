@@ -14,6 +14,15 @@ from typing import TYPE_CHECKING, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+try:
+    import matplotlib.pyplot as plt
+    from scipy import stats
+
+    PLOTTING_AVAILABLE = True
+except ModuleNotFoundError:
+    # More specific than ImportError - only catches missing packages
+    PLOTTING_AVAILABLE = False
+
 if TYPE_CHECKING:
     from .erra_core import ERRAResult
 
@@ -54,19 +63,15 @@ def plot_erra_results(
     use_chinese : bool, optional
         Whether to include Chinese text in plots / 是否在图中包含中文文本
     """
-    try:
-        import matplotlib.pyplot as plt
-        from scipy import stats
-
-        # Configure matplotlib for Chinese fonts if needed
-        if use_chinese:
-            _configure_chinese_fonts()
-
-    except ImportError as e:
+    if not PLOTTING_AVAILABLE:
         raise ImportError(
             "matplotlib and scipy are required for plotting. "
             "Install with: pip install matplotlib scipy"
-        ) from e
+        )
+
+    # Configure matplotlib for Chinese fonts if needed
+    if use_chinese:
+        _configure_chinese_fonts()
 
     if save_plots:
         if output_dir is None:
@@ -103,7 +108,14 @@ def plot_erra_results(
 
     # 3. Residuals analysis / 残差分析
     _plot_residuals_analysis(
-        result, output_dir, filename_prefix, figsize, dpi, show_plots, save_plots, use_chinese
+        result,
+        output_dir,
+        filename_prefix,
+        figsize,
+        dpi,
+        show_plots,
+        save_plots,
+        use_chinese,
     )
 
     # 4. Broken-stick representation (if available)
@@ -156,15 +168,84 @@ def _configure_chinese_fonts():
         plt.rcParams["axes.unicode_minus"] = False  # Fix negative sign display
 
 
+def _bilingual_text(english: str, chinese: str = "", use_chinese: bool = True) -> str:
+    """Create bilingual text for plots.
+
+    创建双语图表文本。
+
+    Parameters / 参数
+    ----------
+    english : str
+        English text / 英文文本
+    chinese : str, optional
+        Chinese text. If empty, returns English only / 中文文本
+    use_chinese : bool
+        Whether to include Chinese text / 是否包含中文
+
+    Returns / 返回
+    -------
+    str
+        Formatted text / 格式化文本
+    """
+    if use_chinese and chinese:
+        return f"{english} / {chinese}"
+    return english
+
+
+def _save_and_show_plot(
+    fig_path: Optional[Path],
+    dpi: int,
+    show_plot: bool,
+    save_plot: bool,
+    plot_name: str,
+    use_chinese: bool,
+) -> None:
+    """Save and/or show a plot with consistent handling.
+
+    保存和/或显示图表的统一处理。
+
+    Parameters / 参数
+    ----------
+    fig_path : Path or None
+        Path to save figure / 保存图片的路径
+    dpi : int
+        DPI for saved figure / 保存图片的DPI
+    show_plot : bool
+        Whether to show the plot / 是否显示图片
+    save_plot : bool
+        Whether to save the plot / 是否保存图片
+    plot_name : str
+        Name of the plot for messages / 图片名称用于消息
+    use_chinese : bool
+        Whether to use bilingual messages / 是否使用双语消息
+    """
+    if save_plot and fig_path is not None:
+        plt.savefig(fig_path, dpi=dpi, bbox_inches="tight")
+        if use_chinese:
+            print(f"保存{plot_name} / Saved {plot_name}: {fig_path}")
+        else:
+            print(f"Saved {plot_name}: {fig_path}")
+
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+
 def _plot_rrd_with_error_bars(
-    result, output_dir, filename_prefix, figsize, dpi, show_plots, save_plots, use_chinese
+    result,
+    output_dir,
+    filename_prefix,
+    figsize,
+    dpi,
+    show_plots,
+    save_plots,
+    use_chinese,
 ):
     """Plot RRD with error bars.
 
     绘制带误差棒的RRD。
     """
-    import matplotlib.pyplot as plt
-
     plt.figure(figsize=figsize)
 
     for col in result.rrd.columns:
@@ -180,42 +261,38 @@ def _plot_rrd_with_error_bars(
             alpha=0.8,
         )
 
+    plt.xlabel(_bilingual_text("Lag (time units)", "时滞 (时间单位)", use_chinese))
+    plt.ylabel(_bilingual_text("RRD Coefficient", "RRD系数", use_chinese))
+    title = "Runoff Response Distribution with Error Bars"
     if use_chinese:
-        plt.xlabel("Lag (time units) / 时滞 (时间单位)")
-        plt.ylabel("RRD Coefficient / RRD系数")
-        plt.title("Runoff Response Distribution with Error Bars\n径流响应分布 (带误差棒)")
-    else:
-        plt.xlabel("Lag (time units)")
-        plt.ylabel("RRD Coefficient")
-        plt.title("Runoff Response Distribution with Error Bars")
+        title += "\n径流响应分布 (带误差棒)"
+    plt.title(title)
 
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    if save_plots:
-        fig_path = output_dir / f"{filename_prefix}_rrd_with_errors.png"
-        plt.savefig(fig_path, dpi=dpi, bbox_inches="tight")
-        if use_chinese:
-            print(f"保存RRD图 / Saved RRD plot: {fig_path}")
-        else:
-            print(f"Saved RRD plot: {fig_path}")
-
-    if show_plots:
-        plt.show()
-    else:
-        plt.close()
+    fig_path = (
+        output_dir / f"{filename_prefix}_rrd_with_errors.png" if save_plots else None
+    )
+    _save_and_show_plot(fig_path, dpi, show_plots, save_plots, "RRD plot", use_chinese)
 
 
 def _plot_fitted_vs_observed(
-    result, observed_q, output_dir, filename_prefix, figsize, dpi, show_plots, save_plots, use_chinese
+    result,
+    observed_q,
+    output_dir,
+    filename_prefix,
+    figsize,
+    dpi,
+    show_plots,
+    save_plots,
+    use_chinese,
 ):
     """Plot fitted vs observed discharge.
 
     绘制拟合值与观测值对比图。
     """
-    import matplotlib.pyplot as plt
-
     if isinstance(observed_q, pd.Series):
         observed_q = observed_q.values
 
@@ -227,16 +304,12 @@ def _plot_fitted_vs_observed(
     plt.subplot(2, 1, 1)
     time_idx = np.arange(plot_length)
 
+    fitted_label = _bilingual_text("Fitted", "拟合值", use_chinese)
+    observed_label = _bilingual_text("Observed", "观测值", use_chinese)
+    ylabel1 = _bilingual_text("Discharge", "流量", use_chinese)
+    title1 = f"Fitted vs Observed Discharge (First {plot_length} points)"
     if use_chinese:
-        fitted_label = "Fitted / 拟合值"
-        observed_label = "Observed / 观测值"
-        ylabel = "Discharge / 流量"
-        title1 = f"Fitted vs Observed Discharge (First {plot_length} points)\n拟合值与观测值对比 (前{plot_length}个点)"
-    else:
-        fitted_label = "Fitted"
-        observed_label = "Observed"
-        ylabel = "Discharge"
-        title1 = f"Fitted vs Observed Discharge (First {plot_length} points)"
+        title1 += f"\n拟合值与观测值对比 (前{plot_length}个点)"
 
     plt.plot(
         time_idx,
@@ -254,7 +327,7 @@ def _plot_fitted_vs_observed(
         alpha=0.6,
         linewidth=1,
     )
-    plt.ylabel(ylabel)
+    plt.ylabel(ylabel1)
     plt.title(title1)
     plt.legend()
     plt.grid(True, alpha=0.3)
@@ -279,133 +352,122 @@ def _plot_fitted_vs_observed(
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
     )
 
+    xlabel = _bilingual_text("Observed Discharge", "观测流量", use_chinese)
+    ylabel2 = _bilingual_text("Fitted Discharge", "拟合流量", use_chinese)
+    title2 = "Scatter Plot: Fitted vs Observed"
     if use_chinese:
-        xlabel = "Observed Discharge / 观测流量"
-        ylabel = "Fitted Discharge / 拟合流量"
-        title2 = "Scatter Plot: Fitted vs Observed\n散点图：拟合值与观测值"
-    else:
-        xlabel = "Observed Discharge"
-        ylabel = "Fitted Discharge"
-        title2 = "Scatter Plot: Fitted vs Observed"
+        title2 += "\n散点图：拟合值与观测值"
 
     plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+    plt.ylabel(ylabel2)
     plt.title(title2)
     plt.legend()
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
 
-    if save_plots:
-        fig_path = output_dir / f"{filename_prefix}_fitted_vs_observed.png"
-        plt.savefig(fig_path, dpi=dpi, bbox_inches="tight")
-        if use_chinese:
-            print(f"保存拟合对比图 / Saved fitted vs observed plot: {fig_path}")
-        else:
-            print(f"Saved fitted vs observed plot: {fig_path}")
-
-    if show_plots:
-        plt.show()
-    else:
-        plt.close()
+    fig_path = (
+        output_dir / f"{filename_prefix}_fitted_vs_observed.png" if save_plots else None
+    )
+    _save_and_show_plot(
+        fig_path, dpi, show_plots, save_plots, "fitted vs observed plot", use_chinese
+    )
 
 
 def _plot_residuals_analysis(
-    result, output_dir, filename_prefix, figsize, dpi, show_plots, save_plots, use_chinese
+    result,
+    output_dir,
+    filename_prefix,
+    figsize,
+    dpi,
+    show_plots,
+    save_plots,
+    use_chinese,
 ):
     """Plot residuals analysis.
 
     绘制残差分析图。
     """
-    import matplotlib.pyplot as plt
-    from scipy import stats
-
     plt.figure(figsize=(figsize[0] * 1.2, figsize[1] * 1.3))
 
     # Time series of residuals
     plt.subplot(2, 2, 1)
     plt.plot(result.residuals, "b-", alpha=0.7, linewidth=0.8)
     plt.axhline(y=0, color="r", linestyle="--", alpha=0.7)
-
+    plt.xlabel(_bilingual_text("Time Index", "时间索引", use_chinese))
+    plt.ylabel(_bilingual_text("Residuals", "残差", use_chinese))
+    title1 = "Residual Time Series"
     if use_chinese:
-        plt.xlabel("Time Index / 时间索引")
-        plt.ylabel("Residuals / 残差")
-        plt.title("Residual Time Series\n残差时间序列")
-    else:
-        plt.xlabel("Time Index")
-        plt.ylabel("Residuals")
-        plt.title("Residual Time Series")
+        title1 += "\n残差时间序列"
+    plt.title(title1)
     plt.grid(True, alpha=0.3)
 
     # Histogram of residuals
     plt.subplot(2, 2, 2)
     plt.hist(result.residuals, bins=50, alpha=0.7, edgecolor="black", linewidth=0.5)
-
+    plt.xlabel(_bilingual_text("Residuals", "残差", use_chinese))
+    plt.ylabel(_bilingual_text("Frequency", "频次", use_chinese))
+    title2 = "Residual Distribution"
     if use_chinese:
-        plt.xlabel("Residuals / 残差")
-        plt.ylabel("Frequency / 频次")
-        plt.title("Residual Distribution\n残差分布")
-    else:
-        plt.xlabel("Residuals")
-        plt.ylabel("Frequency")
-        plt.title("Residual Distribution")
+        title2 += "\n残差分布"
+    plt.title(title2)
     plt.grid(True, alpha=0.3)
 
     # Q-Q plot
     plt.subplot(2, 2, 3)
     stats.probplot(result.residuals, dist="norm", plot=plt)
+    title3 = "Q-Q Plot (Normal)"
     if use_chinese:
-        plt.title("Q-Q Plot (Normal)\n正态Q-Q图")
-    else:
-        plt.title("Q-Q Plot (Normal)")
+        title3 += "\n正态Q-Q图"
+    plt.title(title3)
     plt.grid(True, alpha=0.3)
 
     # Residuals vs fitted
     plt.subplot(2, 2, 4)
     plt.scatter(result.fitted, result.residuals, alpha=0.5, s=1)
     plt.axhline(y=0, color="r", linestyle="--", alpha=0.7)
-
+    plt.xlabel(_bilingual_text("Fitted Values", "拟合值", use_chinese))
+    plt.ylabel(_bilingual_text("Residuals", "残差", use_chinese))
+    title4 = "Residuals vs Fitted"
     if use_chinese:
-        plt.xlabel("Fitted Values / 拟合值")
-        plt.ylabel("Residuals / 残差")
-        plt.title("Residuals vs Fitted\n残差与拟合值")
-    else:
-        plt.xlabel("Fitted Values")
-        plt.ylabel("Residuals")
-        plt.title("Residuals vs Fitted")
+        title4 += "\n残差与拟合值"
+    plt.title(title4)
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
 
-    if save_plots:
-        fig_path = output_dir / f"{filename_prefix}_residuals_analysis.png"
-        plt.savefig(fig_path, dpi=dpi, bbox_inches="tight")
-        if use_chinese:
-            print(f"保存残差分析图 / Saved residuals analysis: {fig_path}")
-        else:
-            print(f"Saved residuals analysis: {fig_path}")
-
-    if show_plots:
-        plt.show()
-    else:
-        plt.close()
+    fig_path = (
+        output_dir / f"{filename_prefix}_residuals_analysis.png" if save_plots else None
+    )
+    _save_and_show_plot(
+        fig_path, dpi, show_plots, save_plots, "residuals analysis", use_chinese
+    )
 
 
 def _plot_broken_stick(
-    result, output_dir, filename_prefix, figsize, dpi, show_plots, save_plots, use_chinese
+    result,
+    output_dir,
+    filename_prefix,
+    figsize,
+    dpi,
+    show_plots,
+    save_plots,
+    use_chinese,
 ):
     """Plot broken-stick representation.
 
     绘制断棍表示图。
     """
-    import matplotlib.pyplot as plt
-
     plt.figure(figsize=figsize)
 
     # Plot original RRD
     for col in result.rrd.columns:
         plt.plot(
-            result.lags, result.rrd[col].values, "-", alpha=0.6, label=f"Original RRD {col}"
+            result.lags,
+            result.rrd[col].values,
+            "-",
+            alpha=0.6,
+            label=f"Original RRD {col}",
         )
 
     # Plot broken-stick representation
@@ -419,28 +481,20 @@ def _plot_broken_stick(
             label=f"Broken-stick {col}",
         )
 
+    plt.xlabel(_bilingual_text("Lag (time units)", "时滞 (时间单位)", use_chinese))
+    plt.ylabel(_bilingual_text("RRD Coefficient", "RRD系数", use_chinese))
+    title = "Broken-stick Representation of RRD"
     if use_chinese:
-        plt.xlabel("Lag (time units) / 时滞 (时间单位)")
-        plt.ylabel("RRD Coefficient / RRD系数")
-        plt.title("Broken-stick Representation of RRD\nRRD的折线表示")
-    else:
-        plt.xlabel("Lag (time units)")
-        plt.ylabel("RRD Coefficient")
-        plt.title("Broken-stick Representation of RRD")
+        title += "\nRRD的折线表示"
+    plt.title(title)
 
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    if save_plots:
-        fig_path = output_dir / f"{filename_prefix}_broken_stick.png"
-        plt.savefig(fig_path, dpi=dpi, bbox_inches="tight")
-        if use_chinese:
-            print(f"保存折线图 / Saved broken-stick plot: {fig_path}")
-        else:
-            print(f"Saved broken-stick plot: {fig_path}")
-
-    if show_plots:
-        plt.show()
-    else:
-        plt.close()
+    fig_path = (
+        output_dir / f"{filename_prefix}_broken_stick.png" if save_plots else None
+    )
+    _save_and_show_plot(
+        fig_path, dpi, show_plots, save_plots, "broken-stick plot", use_chinese
+    )

@@ -12,7 +12,7 @@ non-stationary hydrologic behavior.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -298,4 +298,7 @@ def validate_split_params(split_params: Dict) -> None:
     n = len(split_params["crit"])
     for key in required_keys:
         if len(split_params[key]) != n:
-            raise ValueError(f"All split_params lists must have same length (got {key}={len(split_params[key])}, expected {n})")
+            raise ValueError(
+                f"All split_params lists must have same length "
+                f"(got {key}={len(split_params[key])}, expected {n})"
+            )

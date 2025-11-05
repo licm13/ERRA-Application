@@ -21,7 +21,7 @@ rainfall-runoff analysis, including support for:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, Literal, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterable, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -113,7 +113,9 @@ def erra(
     agg: int = 1,
     labels: Optional[Sequence[str]] = None,
     xknots: Optional[np.ndarray | list] = None,
-    xknot_type: Literal["values", "percentiles", "cumsum", "sqsum", "even"] = "percentiles",
+    xknot_type: Literal[
+        "values", "percentiles", "cumsum", "sqsum", "even"
+    ] = "percentiles",
     show_top_xknot: bool = False,
     split_params: Optional[Dict] = None,
     robust: bool = False,
@@ -375,10 +377,7 @@ def erra(
     """
     # Prepare inputs
     p_matrix, col_labels = _prepare_precipitation(p, labels)
-    q_vec = _to_numpy(q)
-
-    # Store original q for later use
-    q_original = q_vec.copy()
+    q_vec = _convert_to_numpy_array(q)
 
     # Apply aggregation if requested
     if agg > 1:
@@ -388,7 +387,7 @@ def erra(
     if wt is None:
         wt_vec = np.ones_like(q_vec, dtype=float)
     else:
-        wt_vec = _to_numpy(wt)
+        wt_vec = _convert_to_numpy_array(wt)
         if len(wt_vec) != len(q_vec):
             raise ValueError("weights must have the same length as q")
 
@@ -457,7 +456,9 @@ def erra(
         )
 
         # Create labels for NRF columns
-        nrf_labels = create_nrf_labels(col_labels[:n_drivers_original], xknot_values_full, show_top_xknot)
+        nrf_labels = create_nrf_labels(
+            col_labels[:n_drivers_original], xknot_values_full, show_top_xknot
+        )
 
         # Create DataFrames
         nrf = _to_rrd_dataframe(nrf_array, nrf_labels)
@@ -467,8 +468,9 @@ def erra(
         # (Proper error propagation would require covariance matrices)
         nrf_stderr = _to_rrd_dataframe(stderr, nrf_labels)
         stderr_df = _to_rrd_dataframe(
-            np.sqrt(np.mean(stderr**2, axis=1, keepdims=True)) * np.ones((stderr.shape[0], n_drivers_original)),
-            col_labels[:n_drivers_original]
+            np.sqrt(np.mean(stderr**2, axis=1, keepdims=True))
+            * np.ones((stderr.shape[0], n_drivers_original)),
+            col_labels[:n_drivers_original],
         )
 
     else:
@@ -506,8 +508,14 @@ def erra(
 # Helper functions / 辅助函数
 # ---------------------------------------------------------------------------
 
+# Magic number constants for better readability
+_MAD_TO_STD_FACTOR = 1.4826  # Makes MAD consistent with std for normal distribution
+_HUBER_TUNING_CONSTANT = 1.345  # Standard choice for 95% efficiency
 
-def _to_numpy(arr: Sequence[float] | pd.Series | np.ndarray) -> np.ndarray:
+
+def _convert_to_numpy_array(
+    arr: Sequence[float] | pd.Series | np.ndarray,
+) -> np.ndarray:
     """Convert input to a 1-D NumPy array. / 转换为一维 NumPy 数组。"""
     if isinstance(arr, np.ndarray):
         return np.asarray(arr, dtype=float).ravel()
@@ -572,7 +580,7 @@ def _aggregate(
     if wt is None:
         wt_agg = None
     else:
-        wt_arr = _to_numpy(wt)[:trimmed]
+        wt_arr = _convert_to_numpy_array(wt)[:trimmed]
         wt_agg = wt_arr.reshape(trimmed // agg, agg).mean(axis=1)
 
     return p_agg, q_agg, wt_agg
@@ -631,15 +639,15 @@ def _build_design_matrix(
     return design, response, weights
 
 
-def _tikhonov_matrix(size: int) -> np.ndarray:
+def _create_tikhonov_regularization_matrix(lag_count: int) -> np.ndarray:
     """Construct a 2nd-order difference operator for Tikhonov smoothing.
 
     构建用于 Tikhonov 平滑的二阶差分算子。
     """
-    if size <= 2:
-        return np.eye(size, dtype=float)
-    L = np.zeros((size - 2, size), dtype=float)
-    for i in range(size - 2):
+    if lag_count <= 2:
+        return np.eye(lag_count, dtype=float)
+    L = np.zeros((lag_count - 2, lag_count), dtype=float)
+    for i in range(lag_count - 2):
         L[i, i : i + 3] = np.array([1.0, -2.0, 1.0])
     return L
 
@@ -665,7 +673,7 @@ def _solve_rrd(
     Xty = Xw.T @ yw
 
     if nu > 0.0:
-        L = _tikhonov_matrix(m + 1)
+        L = _create_tikhonov_regularization_matrix(m + 1)
         L_big = np.kron(np.eye(k), L)
         reg = nu * (L_big.T @ L_big)
         XtX = XtX + reg
@@ -726,15 +734,15 @@ def _solve_rrd_robust(
         if mad < 1e-10:
             break  # Converged or degenerate
 
-        scaled_resid = residuals / (1.4826 * mad)  # 1.4826 makes MAD consistent with std for normal
+        # Scale residuals by MAD (using factor to make MAD consistent with std)
+        scaled_resid = residuals / (_MAD_TO_STD_FACTOR * mad)
 
         # Huber weights: 1 for |r| <= k, k/|r| for |r| > k
-        # Using k=1.345 (standard choice for 95% efficiency)
-        k_huber = 1.345
+        # Using standard tuning constant for 95% efficiency
         rob_weights = np.where(
-            np.abs(scaled_resid) <= k_huber,
+            np.abs(scaled_resid) <= _HUBER_TUNING_CONSTANT,
             np.ones_like(scaled_resid),
-            k_huber / np.abs(scaled_resid),
+            _HUBER_TUNING_CONSTANT / np.abs(scaled_resid),
         )
 
         # Combine original weights with robust weights

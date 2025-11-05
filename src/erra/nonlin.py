@@ -18,16 +18,21 @@ then reconstruct the full nonlinear response function.
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Tuple
 
 import numpy as np
-import pandas as pd
+
+# Constant for minimum precipitation threshold
+_MIN_PRECIPITATION_VALUE = 0  # Exclude zero precipitation in knot calculations
+_EPSILON_WEIGHT = 1e-10  # Small value to prevent division by zero
 
 
 def create_xprime_matrix(
     p: np.ndarray,
     xknots: np.ndarray,
-    xknot_type: Literal["values", "percentiles", "cumsum", "sqsum", "even"] = "percentiles",
+    xknot_type: Literal[
+        "values", "percentiles", "cumsum", "sqsum", "even"
+    ] = "percentiles",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Create x' (x-prime) matrix for nonlinear analysis.
 
@@ -101,7 +106,7 @@ def create_xprime_matrix(
 
     for i in range(n_drivers):
         p_col = p[:, i]
-        p_nonzero = p_col[p_col > 0]  # Exclude zeros
+        p_nonzero = p_col[p_col > _MIN_PRECIPITATION_VALUE]  # Exclude zeros
 
         if len(p_nonzero) == 0:
             raise ValueError(f"Driver {i} has no positive values")
@@ -250,10 +255,8 @@ def betaprime_to_nrf(
             # Calculate cumulative NRF at each knot
             # NRF[i] = Σ_{j=0}^{i} β'[j] × (k_{j+1} - k_j)
             for seg_idx in range(n_segments):
-                interval_width = kpts[seg_idx + 1] - kpts[seg_idx]
                 cumulative_response = np.sum(
-                    bp_lag[: seg_idx + 1]
-                    * np.diff(kpts[: seg_idx + 2])
+                    bp_lag[: seg_idx + 1] * np.diff(kpts[: seg_idx + 2])
                 )
                 nrf[lag_idx, bp_start + seg_idx] = cumulative_response
 
@@ -266,12 +269,10 @@ def betaprime_to_nrf(
 
         # Weight by segment-weighted mean precipitation
         weights = seg_wtd_meanx[:, driver_idx]
-        weights = weights / (np.sum(weights) + 1e-10)  # Normalize
+        weights = weights / (np.sum(weights) + _EPSILON_WEIGHT)  # Normalize
 
         for lag_idx in range(m_plus_1):
-            rrd[lag_idx, driver_idx] = np.sum(
-                nrf[lag_idx, bp_start:bp_end] * weights
-            )
+            rrd[lag_idx, driver_idx] = np.sum(nrf[lag_idx, bp_start:bp_end] * weights)
 
     return nrf, rrd
 
@@ -304,7 +305,6 @@ def create_nrf_labels(
         每个 NRF 列的标签
     """
     n_segments = knot_values.shape[0] - 1
-    n_drivers = len(base_labels)
 
     labels = []
     for driver_idx, base_label in enumerate(base_labels):
