@@ -394,6 +394,20 @@ Simulates permafrost degradation impacts on runoff generation, showing declining
 
 模拟多年冻土退化对径流生成的影响，显示流量对降水的敏感度随时间下降。
 
+### Observed data preparation for SCI reproductions / SCI 案例观测数据准备
+
+Each SCI-inspired example can operate on real observations. Run the corresponding downloader once before executing the example to fetch NOAA GHCN precipitation and USGS NWIS discharge records (outputs saved under `code/examples/data/processed/`).
+
+每个 SCI 案例均支持真实观测数据。首次运行示例前，请执行以下脚本获取 NOAA GHCN 降水与 USGS NWIS 流量数据（结果存放在 `code/examples/data/processed/` 目录）。
+
+```bash
+python code/examples/data_prep/gao2025_fetch_data.py
+python code/examples/data_prep/sharif_ameli2025_fetch_data.py
+python code/examples/data_prep/tu2025_fetch_data.py
+```
+
+> 数据来源 / Data sources: NOAA National Centers for Environmental Information, Global Historical Climatology Network (Daily Summaries); USGS National Water Information System (Daily Discharge). See the [Open Data Sources](#open-data-sources--开放数据来源) section for full citations.
+
 ### 5. `complex_sensitivity_study.py`
 
 A comprehensive stress test with multiple drivers, variable weights, and non-stationary noise to probe ERRA's robustness.
@@ -417,6 +431,11 @@ A comprehensive stress test with multiple drivers, variable weights, and non-sta
 See `reference_materials/papers/` for three recent studies applying ERRA to real-world catchments.
 
 查看 `reference_materials/papers/` 获取将 ERRA 应用于实际流域的三个最新研究。
+
+### Open Data Sources / 开放数据来源
+
+- **USGS National Water Information System (NWIS)** — Daily discharge data for USGS 11477000, 09506000, and 15515500 (accessed via `https://waterservices.usgs.gov/nwis/dv/`). 美国地质调查局 NWIS 日尺度流量数据。
+- **NOAA National Centers for Environmental Information (NCEI)** — Global Historical Climatology Network Daily Summaries for stations USC00043110, USW00023160, and USW00026411 (accessed via `https://www.ncei.noaa.gov/access/services/data/v1`). 美国国家海洋与大气管理局（NOAA）NCEI GHCN 日尺度降水、温度与积雪数据。
 
 ---
 

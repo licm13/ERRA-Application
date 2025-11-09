@@ -17,12 +17,19 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 def make_split_sets(
     p: np.ndarray,
     q: np.ndarray,
     split_params: Dict,
     wt: Optional[np.ndarray] = None,
+    *,
+    min_bin_size: int = 15,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[str], pd.DataFrame]:
     """Split precipitation time series based on external criteria.
 
@@ -55,6 +62,9 @@ def make_split_sets(
         - by_bin: list of booleans (是否在每个 bin 内设置断点)
     wt : np.ndarray, optional
         Observation weights (观测权重)
+    min_bin_size : int, optional
+        Minimum number of observations recommended for each split subset.
+        每个分组建议的最小样本数量。当数据不足时将记录日志警告。
 
     Returns / 返回
     -------
@@ -91,7 +101,28 @@ def make_split_sets(
     ...     p, q, split_params
     ... )
     """
+    if not isinstance(p, np.ndarray):
+        raise TypeError("p must be a numpy.ndarray")
+    if not isinstance(q, np.ndarray):
+        raise TypeError("q must be a numpy.ndarray")
+    if wt is not None and not isinstance(wt, np.ndarray):
+        raise TypeError("wt must be a numpy.ndarray when provided")
+
+    if p.ndim == 1:
+        p = p.reshape(-1, 1)
+    if q.ndim != 1:
+        raise ValueError("q must be one-dimensional")
+
     n = len(q)
+    if p.shape[0] != n:
+        raise ValueError(
+            "p and q must have the same number of observations "
+            f"(got p rows={p.shape[0]}, q length={n})"
+        )
+
+    if min_bin_size < 1:
+        raise ValueError("min_bin_size must be >= 1")
+
     n_drivers = p.shape[1]
 
     # Extract split parameters
@@ -132,36 +163,90 @@ def make_split_sets(
 
     # Calculate breakpoints and create bin assignments
     bin_assignments = np.zeros((n, n_crit), dtype=int)
-    breakpt_values = []  # Store actual breakpoint values used
+    breakpt_values: List[Dict[Optional[Tuple[int, ...]], np.ndarray]] = []
+
+    logger.debug("Starting split computation for %d criteria", n_crit)
 
     for i in range(n_crit):
         crit_values = lagged_crit[i]
         bp_list = breakpts[i]
 
-        if pct_breakpts[i]:
-            # Calculate percentile-based breakpoints
-            # Exclude values <= threshold
+        if len(bp_list) == 0:
+            global_bp_vals = np.array([], dtype=float)
             valid_mask = (~np.isnan(crit_values)) & (crit_values > thresh[i])
+        elif pct_breakpts[i]:
+            valid_mask = (~np.isnan(crit_values)) & (crit_values > thresh[i])
+            valid_values = crit_values[valid_mask]
 
-            if by_bin[i] and i > 0:
-                # Calculate breakpoints within each bin of previous criteria
-                # This is complex - for simplicity, we'll use global percentiles
-                # A full implementation would iterate through all previous bin combinations
-                valid_values = crit_values[valid_mask]
-                bp_vals = np.percentile(valid_values, bp_list)
+            if valid_values.size == 0:
+                logger.warning(
+                    "Criterion '%s' has no values above threshold %.3f; using NaNs.",
+                    crit_label[i],
+                    thresh[i],
+                )
+                global_bp_vals = np.full(len(bp_list), np.nan)
+            elif np.unique(valid_values).size == 1:
+                single_val = float(np.unique(valid_values)[0])
+                logger.info(
+                    "Criterion '%s' valid data collapses to %.3f; using repeated breakpoints.",
+                    crit_label[i],
+                    single_val,
+                )
+                global_bp_vals = np.full(len(bp_list), single_val)
             else:
-                # Global percentiles
-                valid_values = crit_values[valid_mask]
-                bp_vals = np.percentile(valid_values, bp_list)
-
+                global_bp_vals = np.percentile(valid_values, bp_list)
         else:
-            # Use fixed breakpoint values
-            bp_vals = np.array(bp_list, dtype=float)
+            valid_mask = ~np.isnan(crit_values)
+            global_bp_vals = np.array(bp_list, dtype=float)
 
-        breakpt_values.append(bp_vals)
+        if not by_bin[i] or i == 0:
+            bp_map: Dict[Optional[Tuple[int, ...]], np.ndarray] = {(): global_bp_vals}
+            bins = np.digitize(crit_values, global_bp_vals)
+        else:
+            bp_map = {}
+            prev_assignments = bin_assignments[:, :i]
+            combos, inverse_idx = np.unique(
+                prev_assignments, axis=0, return_inverse=True
+            )
+            bins = np.zeros(n, dtype=int)
 
-        # Assign bins
-        bins = np.digitize(crit_values, bp_vals)
+            for combo_idx, combo in enumerate(combos):
+                combo_key = tuple(int(x) for x in combo)
+                combo_mask = inverse_idx == combo_idx
+                combo_valid_mask = combo_mask & valid_mask
+                combo_count = int(combo_valid_mask.sum())
+
+                if pct_breakpts[i] and combo_count > 1:
+                    combo_values = crit_values[combo_valid_mask]
+                    if combo_count < min_bin_size:
+                        logger.warning(
+                            "Criterion '%s' bin %s has only %d valid observations; consider merging bins or adjusting thresholds.",
+                            crit_label[i],
+                            combo_key,
+                            combo_count,
+                        )
+
+                    if np.unique(combo_values).size == 1:
+                        bp_vals = np.full(len(bp_list), float(combo_values[0]))
+                    else:
+                        bp_vals = np.percentile(combo_values, bp_list)
+                else:
+                    if combo_count <= 1:
+                        logger.warning(
+                            "Criterion '%s' bin %s lacks sufficient data (count=%d); falling back to global breakpoints.",
+                            crit_label[i],
+                            combo_key,
+                            combo_count,
+                        )
+                    bp_vals = global_bp_vals
+
+                bp_map[combo_key] = bp_vals
+                bins[combo_mask] = np.digitize(crit_values[combo_mask], bp_vals)
+
+            if () not in bp_map:
+                bp_map[()] = global_bp_vals
+
+        breakpt_values.append(bp_map)
         bin_assignments[:, i] = bins
 
     # Create unique bin combinations and labels
@@ -178,6 +263,7 @@ def make_split_sets(
     criteria_records = []
 
     bin_idx = 0
+    subset_counts: Dict[str, int] = {}
     for bin_combo in _generate_bin_combinations(n_bins_per_crit):
         # Create mask for this bin combination
         mask = np.ones(n, dtype=bool)
@@ -189,7 +275,10 @@ def make_split_sets(
             label_parts.append(f"{crit_label[i]}_{bin_num}")
 
             # Record criteria bounds for this bin
-            bp_vals = breakpt_values[i]
+            bp_map = breakpt_values[i]
+            prev_combo = tuple(bin_combo[:i])
+            bp_vals = _resolve_breakpoints(bp_map, prev_combo)
+
             if bin_num == 0:
                 lower = -np.inf
                 upper = bp_vals[0] if len(bp_vals) > 0 else np.inf
@@ -216,6 +305,20 @@ def make_split_sets(
         set_labels.append(set_label)
         criteria_records.append(criteria_row)
 
+        observation_count = int(mask.sum())
+        subset_counts[set_label] = observation_count
+        if observation_count == 0:
+            logger.info(
+                "Split subset %s is empty. Consider revising breakpoints or thresholds.",
+                set_label,
+            )
+        elif observation_count < min_bin_size:
+            logger.warning(
+                "Split subset %s has only %d observations; statistical estimates may be noisy.",
+                set_label,
+                observation_count,
+            )
+
         # Fill in precipitation for this bin combination
         for driver_idx in range(n_drivers):
             col_idx = bin_idx * n_drivers + driver_idx
@@ -225,11 +328,19 @@ def make_split_sets(
 
     # Create criteria dataframe
     criteria_df = pd.DataFrame(criteria_records, index=set_labels)
+    if subset_counts:
+        criteria_df["count"] = pd.Series(subset_counts)
+        logger.debug("Subset observation counts: %s", subset_counts)
 
     # Handle weights
     if wt is None:
         wt_out = np.ones(n)
     else:
+        if len(wt) != n:
+            raise ValueError(
+                "Weights must have the same length as q "
+                f"(got {len(wt)} vs {n})"
+            )
         wt_out = wt.copy()
 
     return p_split, q, wt_out, set_labels, criteria_df
@@ -262,6 +373,28 @@ def _generate_bin_combinations(n_bins_per_crit: List[int]):
         else:
             for rest in _generate_bin_combinations(n_bins_per_crit[1:]):
                 yield (i,) + rest
+
+
+def _resolve_breakpoints(
+    bp_map: Dict[Optional[Tuple[int, ...]], np.ndarray],
+    prev_combo: Tuple[int, ...],
+) -> np.ndarray:
+    """Resolve the breakpoint array for a specific combination of previous bins."""
+
+    if prev_combo in bp_map:
+        return bp_map[prev_combo]
+
+    if () in bp_map:
+        return bp_map[()]
+
+    if None in bp_map:
+        return bp_map[None]
+
+    if bp_map:
+        first_key = next(iter(bp_map))
+        return bp_map[first_key]
+
+    return np.array([])
 
 
 def validate_split_params(split_params: Dict) -> None:
